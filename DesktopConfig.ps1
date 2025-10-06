@@ -1021,6 +1021,34 @@ function Disable-UserChoiceProtection {
     }
 }
 
+function Enable-UserChoiceProtection {
+    Write-Log "Enabling User Choice Protection Driver..." "INFO"
+    Write-Log "NOTE: UCPD changes require SYSTEM RESTART to take effect" "WARNING"
+    
+    try {
+        Write-Log "  Modifying UCPD service registry..." "INFO"
+        $ucpdServicePath = "HKLM:\SYSTEM\CurrentControlSet\Services\UCPD"
+        
+        $oldStartValue = (Get-ItemProperty -Path $ucpdServicePath -Name "Start" -ErrorAction SilentlyContinue).Start
+        Set-Service -Name UCPD -StartupType Automatic
+        
+        Write-RegistryChangeLog -Action "MODIFIED" -Path $ucpdServicePath -Name "Start" -OldValue $oldStartValue -NewValue "1" -Type "DWord"
+        Write-Log "  UCPD service enabled successfully" "SUCCESS"
+        
+        Write-Log "  Enabling UCPD velocity scheduled task..." "INFO"
+        Enable-ScheduledTask -TaskName "\Microsoft\Windows\AppxDeploymentClient\UCPD velocity" -ErrorAction Stop
+        Write-Log "  UCPD velocity scheduled task enabled successfully" "SUCCESS"
+        Write-Log "  NOTE: Task changes stored in Task Scheduler database, not registry" "INFO"
+        
+        Write-Log "User Choice Protection Driver has been enabled successfully!" "SUCCESS"
+        Write-Log "⚠️  CRITICAL: Computer MUST be restarted for UCPD changes to take effect" "WARNING"
+        return $true
+    } catch {
+        Write-Log "Failed to Enabled User Choice Protection: $($_.Exception.Message)" "ERROR"
+        return $false
+    }
+}
+
 function Install-LogonTask {
     try {
         Write-Log "Creating scheduled task for desktop configuration..." "INFO"
@@ -1123,6 +1151,8 @@ function Invoke-DesktopConfiguration {
     
     Write-Log "" "INFO"
     Set-ConfigurationMarker
+
+    Enable-UserChoiceProtection
     
     $endTime = Get-Date
     $duration = ($endTime - $startTime).TotalSeconds
@@ -1153,7 +1183,7 @@ function Invoke-DesktopConfiguration {
 
 try {
     Write-Log "==========================================" "INFO"
-    Write-Log "Desktop Configuration Script v2.2 Started" "INFO"
+    Write-Log "Desktop Configuration Script Started" "INFO"
     Write-Log "==========================================" "INFO"
     Write-Log "Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" "INFO"
     Write-Log "User: $env:USERNAME" "INFO"
