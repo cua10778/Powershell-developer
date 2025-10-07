@@ -675,12 +675,12 @@ function Set-DefaultBrowserFileAssociations {
             return $false
         }
         
-        Write-Log "Configuring Chrome file associations (.pdf, .html, )..." "INFO"
+        Write-Log "Configuring Chrome file associations (.htm, .html)..." "INFO"
         Write-Log "This will modify registry keys for file extensions" "INFO"
         
         $UserProfiles = Get-UserHives -Type "All"
         $htmlID = "ChromeHTML"
-        $Files = "pdf", "html"
+        $Files = "htm", "html", "pdf", "xml"
         
         foreach ($UserProfile in $UserProfiles) {
             Write-Log "Processing file associations for: $($UserProfile.UserName)" "INFO"
@@ -708,14 +708,33 @@ function Set-DefaultBrowserFileAssociations {
                     
                     Write-Log "Setting .$File file association for $($UserProfile.UserName)" "INFO"
                     
-                    # FileExts path - DELETE first, then recreate
+                    # FileExts path - DELETE first using .NET Registry API, then recreate
                     $fileExtPath = "Registry::HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.$File\UserChoice"
                     
-                    # Delete existing UserChoice key if it exists
-                    if (Test-Path $fileExtPath) {
-                        Write-Log "Removing existing UserChoice key for .$File" "INFO"
-                        Remove-Item -Path $fileExtPath -Force -ErrorAction Stop
-                        Write-Log "Deleted: $fileExtPath" "SUCCESS"
+                    # Delete existing UserChoice key if it exists using .NET Registry API
+                    try {
+                        $parentPath = "$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.$File"
+                        $hive = [Microsoft.Win32.Registry]::Users
+                        $parent = $hive.OpenSubKey($parentPath, $true) # $true = writable
+                        
+                        if ($parent -ne $null) {
+                            try {
+                                $parent.DeleteSubKey('UserChoice', $false) # $false = don't throw if missing
+                                Write-Log "Deleted UserChoice key for .$File using Registry API" "SUCCESS"
+                            }
+                            catch {
+                                Write-Log "Could not delete UserChoice for .$File (may not exist or protected): $($_.Exception.Message)" "WARNING"
+                            }
+                            finally {
+                                $parent.Close()
+                            }
+                        }
+                        else {
+                            Write-Log "Parent key for .$File does not exist, will create fresh" "INFO"
+                        }
+                    }
+                    catch {
+                        Write-Log "Failed to access registry for deletion of .$File $($_.Exception.Message)" "WARNING"
                     }
                     
                     # Now create fresh with Set-RegKey
