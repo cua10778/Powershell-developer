@@ -612,7 +612,7 @@ function Set-DefaultBrowser {
         
         $UserProfiles = Get-UserHives -Type "All"
         $urlID = "ChromeHTML"
-        $Protocols = "http", "https", "ftp"
+        $Protocols = "http", "https"
         
         foreach ($UserProfile in $UserProfiles) {
             Write-Log "Processing user: $($UserProfile.UserName) (SID: $($UserProfile.SID))" "INFO"
@@ -675,12 +675,12 @@ function Set-DefaultBrowserFileAssociations {
             return $false
         }
         
-        Write-Log "Configuring Chrome file associations (.htm, .html, .xhtml)..." "INFO"
+        Write-Log "Configuring Chrome file associations (.pdf, .html, )..." "INFO"
         Write-Log "This will modify registry keys for file extensions" "INFO"
         
         $UserProfiles = Get-UserHives -Type "All"
         $htmlID = "ChromeHTML"
-        $Files = "htm", "html", "xhtml"
+        $Files = "pdf", "html"
         
         foreach ($UserProfile in $UserProfiles) {
             Write-Log "Processing file associations for: $($UserProfile.UserName)" "INFO"
@@ -708,17 +708,21 @@ function Set-DefaultBrowserFileAssociations {
                     
                     Write-Log "Setting .$File file association for $($UserProfile.UserName)" "INFO"
                     
-                    # UrlAssociations path
-                    $urlAssocPath = "Registry::HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\$File\UserChoice"
-                    Set-RegKey -Path $urlAssocPath -Name "Hash" -Value $Hash -PropertyType String
-                    Set-RegKey -Path $urlAssocPath -Name "ProgId" -Value $htmlID -PropertyType String
-                    
-                    # FileExts path
+                    # FileExts path - DELETE first, then recreate
                     $fileExtPath = "Registry::HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.$File\UserChoice"
+                    
+                    # Delete existing UserChoice key if it exists
+                    if (Test-Path $fileExtPath) {
+                        Write-Log "Removing existing UserChoice key for .$File" "INFO"
+                        Remove-Item -Path $fileExtPath -Force -ErrorAction Stop
+                        Write-Log "Deleted: $fileExtPath" "SUCCESS"
+                    }
+                    
+                    # Now create fresh with Set-RegKey
                     Set-RegKey -Path $fileExtPath -Name "Hash" -Value $Hash -PropertyType String
                     Set-RegKey -Path $fileExtPath -Name "ProgId" -Value $htmlID -PropertyType String
                 } catch {
-                    Write-Log "Failed to set .$File for $($UserProfile.UserName)" "WARNING"
+                    Write-Log "Failed to set .$File for $($UserProfile.UserName): $($_.Exception.Message)" "WARNING"
                 }
             }
             
@@ -1151,7 +1155,8 @@ function Invoke-DesktopConfiguration {
     
     Write-Log "" "INFO"
     Set-ConfigurationMarker
-
+    
+    Start-Sleep -Seconds 3
     Enable-UserChoiceProtection
     
     $endTime = Get-Date
@@ -1240,7 +1245,7 @@ try {
                 Write-Host ""
                 Write-Host "After restart:" -ForegroundColor Cyan
                 Write-Host "  • Chrome default browser settings will work properly" -ForegroundColor White
-                Write-Host "  • Chrome file associations (.htm, .html, .xhtml) will be set" -ForegroundColor White
+                Write-Host "  • Chrome file associations (.pdf, .html) will be set" -ForegroundColor White
                 Write-Host "  • Configuration will run automatically at user logon" -ForegroundColor White
                 Write-Host "  • All desktop settings will be applied to users" -ForegroundColor White
                 Write-Host ""
@@ -1301,7 +1306,7 @@ try {
         Write-Host "  • Wallpaper and lock screen" -ForegroundColor White
         Write-Host "  • Company screensaver" -ForegroundColor White
         Write-Host "  • Chrome as default browser (HTTP/HTTPS/FTP protocols)" -ForegroundColor White
-        Write-Host "  • Chrome file associations (.htm, .html, .xhtml)" -ForegroundColor White
+        Write-Host "  • Chrome file associations (.pdf, .html,)" -ForegroundColor White
         Write-Host "  • Outlook as default email client" -ForegroundColor White
         Write-Host "  • Taskbar pins (Chrome, Word, Excel, Teams, Planner)" -ForegroundColor White
         Write-Host "  • Edge association removal" -ForegroundColor White
