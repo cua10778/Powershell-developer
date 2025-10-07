@@ -26,7 +26,7 @@
     Applies configuration (automatically run at logon)
     
 .NOTES
-    Version: 2.2 - Enhanced registry logging and tracking
+    Version: 2 - Enhanced registry logging and tracking
     Compatible: Windows 10 Pro, Windows 11 Pro
     Installation: Requires admin rights (one-time)
     Execution: Standard users (NO admin rights required)
@@ -680,7 +680,7 @@ function Set-DefaultBrowserFileAssociations {
         
         $UserProfiles = Get-UserHives -Type "All"
         $htmlID = "ChromeHTML"
-        $Files = "htm", "html", "pdf", "xml"
+        $Files = "htm", "html", "pdf"
         
         foreach ($UserProfile in $UserProfiles) {
             Write-Log "Processing file associations for: $($UserProfile.UserName)" "INFO"
@@ -1325,7 +1325,7 @@ try {
         Write-Host "  • Wallpaper and lock screen" -ForegroundColor White
         Write-Host "  • Company screensaver" -ForegroundColor White
         Write-Host "  • Chrome as default browser (HTTP/HTTPS/FTP protocols)" -ForegroundColor White
-        Write-Host "  • Chrome file associations (.pdf, .html,)" -ForegroundColor White
+        Write-Host "  • Chrome file associations ()" -ForegroundColor White
         Write-Host "  • Outlook as default email client" -ForegroundColor White
         Write-Host "  • Taskbar pins (Chrome, Word, Excel, Teams, Planner)" -ForegroundColor White
         Write-Host "  • Edge association removal" -ForegroundColor White
