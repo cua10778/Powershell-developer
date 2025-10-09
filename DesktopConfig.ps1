@@ -48,6 +48,7 @@ $Config = @{
     WallpaperPath = "C:\Ken\wallpaper\wallpaper.jpg"
     LockScreenPath = "C:\Ken\wallpaper\lockscreen.jpg"
     ScreensaverPath = "C:\Ken\wallpaper\screensaver.jpg"
+    ChromeHomepage = "https://www.fluor.com"  # ← Your company website
     
     # SCREENSAVER SETTINGS
     ScreensaverTimeout = 600
@@ -1123,6 +1124,143 @@ function Set-ConfigurationMarker {
     Write-Log "Configuration marker created: $markerPath (Version: $currentVersion)" "SUCCESS"
 }
 
+function Set-ChromeDefaultPage {
+    param(
+        [string]$DefaultPage 
+    )
+    
+    try {
+        Write-Log "Configuring Chrome default page across all shortcuts: $DefaultPage" "INFO"
+        
+        # Check if Chrome is installed
+        $chromePath = "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe"
+        if (!(Test-Path $chromePath)) {
+            $chromePath = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe"
+            if (!(Test-Path $chromePath)) {
+                Write-Log "Chrome is not installed in the system" "ERROR"
+                return $false
+            }
+        }
+        
+        Write-Log "Chrome found at: $chromePath" "SUCCESS"
+        
+        # Define all Chrome shortcut locations
+        $shortcutLocations = @(
+            # Current User Desktop
+            @{
+                Path = [Environment]::GetFolderPath("Desktop")
+                Name = "Google Chrome.lnk"
+                Description = "User Desktop"
+            },
+            # Public Desktop (All Users)
+            @{
+                Path = [Environment]::GetFolderPath("CommonDesktopDirectory")
+                Name = "Google Chrome.lnk"
+                Description = "Public Desktop"
+            },
+            # Current User Start Menu
+            @{
+                Path = [Environment]::GetFolderPath("StartMenu") + "\Programs"
+                Name = "Google Chrome.lnk"
+                Description = "User Start Menu"
+            },
+            # Common Start Menu (All Users)
+            @{
+                Path = [Environment]::GetFolderPath("CommonStartMenu") + "\Programs"
+                Name = "Google Chrome.lnk"
+                Description = "All Users Start Menu"
+            },
+            # Taskbar Pinned Items
+            @{
+                Path = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+                Name = "Google Chrome.lnk"
+                Description = "Taskbar"
+            },
+            # Start Menu Pinned Items
+            @{
+                Path = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"
+                Name = "Google Chrome.lnk"
+                Description = "Pinned Start Menu"
+            },
+            # Quick Launch
+            @{
+                Path = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch"
+                Name = "Google Chrome.lnk"
+                Description = "Quick Launch"
+            }
+        )
+        
+        $WshShell = New-Object -ComObject WScript.Shell
+        $modifiedCount = 0
+        $createdCount = 0
+        
+        foreach ($location in $shortcutLocations) {
+            $fullPath = Join-Path $location.Path $location.Name
+            
+            # Check if directory exists
+            if (!(Test-Path $location.Path)) {
+                Write-Log "Location does not exist: $($location.Description) - $($location.Path)" "INFO"
+                continue
+            }
+            
+            $shortcutExists = Test-Path $fullPath
+            
+            try {
+                # Create or modify the shortcut
+                $Shortcut = $WshShell.CreateShortcut($fullPath)
+                $Shortcut.TargetPath = $chromePath
+                $Shortcut.Arguments = $DefaultPage
+                $Shortcut.Description = "Google Chrome - Opens to $DefaultPage"
+                $Shortcut.WindowStyle = 1  # Normal window
+                $Shortcut.WorkingDirectory = Split-Path $chromePath
+                
+                # Set icon to Chrome's icon
+                $Shortcut.IconLocation = "$chromePath,0"
+                
+                $Shortcut.Save()
+                
+                if ($shortcutExists) {
+                    Write-Log "Modified existing shortcut: $($location.Description) - $fullPath" "SUCCESS"
+                    $modifiedCount++
+                } else {
+                    Write-Log "Created new shortcut: $($location.Description) - $fullPath" "SUCCESS"
+                    $createdCount++
+                }
+                
+                # Verify the shortcut was created/modified
+                if (Test-Path $fullPath) {
+                    $verifyShortcut = $WshShell.CreateShortcut($fullPath)
+                    Write-Log "  Target: $($verifyShortcut.TargetPath)" "DEBUG"
+                    Write-Log "  Arguments: $($verifyShortcut.Arguments)" "DEBUG"
+                }
+            }
+            catch {
+                Write-Log "Failed to create/modify shortcut at $($location.Description): $($_.Exception.Message)" "WARNING"
+            }
+        }
+        
+        # Clean up COM object
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($WshShell) | Out-Null
+        
+        Write-Log "Chrome shortcut configuration completed" "SUCCESS"
+        Write-Log "  Created: $createdCount shortcuts" "INFO"
+        Write-Log "  Modified: $modifiedCount shortcuts" "INFO"
+        Write-Log "  Total processed: $($createdCount + $modifiedCount) shortcuts" "INFO"
+        Write-Log "  Default page set to: $DefaultPage" "INFO"
+        
+        if (($createdCount + $modifiedCount) -eq 0) {
+            Write-Log "No Chrome shortcuts were found or created - Chrome may need to be launched once to create initial shortcuts" "WARNING"
+            return $false
+        }
+        
+        return $true
+    }
+    catch {
+        Write-Log "Failed to configure Chrome shortcuts: $($_.Exception.Message)" "ERROR"
+        return $false
+    }
+}
+
 # =============================================================================
 # MAIN CONFIGURATION FUNCTION
 # =============================================================================
@@ -1133,47 +1271,51 @@ function Invoke-DesktopConfiguration {
     Write-Log "======================================" "INFO"
     $startTime = Get-Date
     
-    if (Test-ConfigurationApplied) {
-        Write-Log "Configuration already applied and up to date - skipping" "INFO"
-        return
-    }
+    # if (Test-ConfigurationApplied) {
+    #     Write-Log "Configuration already applied and up to date - skipping" "INFO"
+    #     return
+    # }
     
     $results = @()
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 1: Wallpaper Configuration ---" "INFO"
-    $results += Set-Wallpaper -Path $Config.WallpaperPath
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 1: Wallpaper Configuration ---" "INFO"
+    # $results += Set-Wallpaper -Path $Config.WallpaperPath
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 2: Lock Screen Configuration ---" "INFO"
-    $results += Set-LockScreen -Path $Config.LockScreenPath
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 2: Lock Screen Configuration ---" "INFO"
+    # $results += Set-LockScreen -Path $Config.LockScreenPath
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 3: Screensaver Configuration ---" "INFO"
-    $results += Set-Screensaver -ImagePath $Config.ScreensaverPath -TimeoutSeconds $Config.ScreensaverTimeout
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 3: Screensaver Configuration ---" "INFO"
+    # $results += Set-Screensaver -ImagePath $Config.ScreensaverPath -TimeoutSeconds $Config.ScreensaverTimeout
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 4: Chrome Default Browser (Protocols) ---" "INFO"
-    $results += Set-DefaultBrowser
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 4: Chrome Default Browser (Protocols) ---" "INFO"
+    # $results += Set-DefaultBrowser
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 5: Chrome File Associations ---" "INFO"
-    $results += Set-DefaultBrowserFileAssociations
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 5: Chrome File Associations ---" "INFO"
+    # $results += Set-DefaultBrowserFileAssociations
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 6: Outlook Default Email Client ---" "INFO"
-    $results += Set-DefaultEmailClient
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 6: Outlook Default Email Client ---" "INFO"
+    # $results += Set-DefaultEmailClient
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 7: Remove Edge from Taskbar ---" "INFO"
-    $results += Remove-EdgeFromTaskbar
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 7: Remove Edge from Taskbar ---" "INFO"
+    # $results += Remove-EdgeFromTaskbar
     
-    Write-Log "" "INFO"
-    Write-Log "--- STEP 8: Configure Taskbar Pins ---" "INFO"
-    $results += Set-TaskbarPins
+    # Write-Log "" "INFO"
+    # Write-Log "--- STEP 8: Configure Taskbar Pins ---" "INFO"
+    # $results += Set-TaskbarPins
     
+    # Write-Log "" "INFO"
+    # Set-ConfigurationMarker
+
     Write-Log "" "INFO"
-    Set-ConfigurationMarker
+    Write-Log "--- STEP 9: Configure Chrome Homepage ---" "INFO"
+    $results += Set-ChromeDefaultPage -DefaultPage $Config.ChromeHomepage
     
     Start-Sleep -Seconds 3
     Enable-UserChoiceProtection
