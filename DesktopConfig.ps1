@@ -45,10 +45,10 @@ param(
 
 $Config = @{
     # IMAGE FILE LOCATIONS
-    WallpaperPath = "C:\Ken\wallpaper\wallpaper.jpg"
-    LockScreenPath = "C:\Ken\wallpaper\lockscreen.jpg"
-    ScreensaverPath = "C:\Ken\wallpaper\screensaver.jpg"
-    ChromeHomepage = "https://www.fluor.com"  # ← Your company website
+    WallpaperPath = "C:\Scripts\Images\wallpaper.jpg"
+    LockScreenPath = "C:\Scripts\Images\lockscreen.jpg"
+    ScreensaverPath = "C:\Scripts\Images\"
+    ChromeHomepage = "https://www.google.com"  # ← Your company website
     
     # SCREENSAVER SETTINGS
     ScreensaverTimeout = 600
@@ -676,7 +676,7 @@ function Set-DefaultBrowserFileAssociations {
             return $false
         }
         
-        Write-Log "Configuring Chrome file associations (.htm, .html)..." "INFO"
+        Write-Log "Configuring Chrome file associations (.htm, .html, pdf)..." "INFO"
         Write-Log "This will modify registry keys for file extensions" "INFO"
         
         $UserProfiles = Get-UserHives -Type "All"
@@ -1019,7 +1019,6 @@ PINLISTXML
 
 function Disable-UserChoiceProtection {
     Write-Log "Disabling User Choice Protection Driver..." "INFO"
-    Write-Log "NOTE: UCPD changes require SYSTEM RESTART to take effect" "WARNING"
     
     try {
         Write-Log "  Modifying UCPD service registry..." "INFO"
@@ -1045,33 +1044,6 @@ function Disable-UserChoiceProtection {
     }
 }
 
-function Enable-UserChoiceProtection {
-    Write-Log "Enabling User Choice Protection Driver..." "INFO"
-    Write-Log "NOTE: UCPD changes require SYSTEM RESTART to take effect" "WARNING"
-    
-    try {
-        Write-Log "  Modifying UCPD service registry..." "INFO"
-        $ucpdServicePath = "HKLM:\SYSTEM\CurrentControlSet\Services\UCPD"
-        
-        $oldStartValue = (Get-ItemProperty -Path $ucpdServicePath -Name "Start" -ErrorAction SilentlyContinue).Start
-        Set-Service -Name UCPD -StartupType Automatic
-        
-        Write-RegistryChangeLog -Action "MODIFIED" -Path $ucpdServicePath -Name "Start" -OldValue $oldStartValue -NewValue "1" -Type "DWord"
-        Write-Log "  UCPD service enabled successfully" "SUCCESS"
-        
-        Write-Log "  Enabling UCPD velocity scheduled task..." "INFO"
-        Enable-ScheduledTask -TaskName "\Microsoft\Windows\AppxDeploymentClient\UCPD velocity" -ErrorAction Stop
-        Write-Log "  UCPD velocity scheduled task enabled successfully" "SUCCESS"
-        Write-Log "  NOTE: Task changes stored in Task Scheduler database, not registry" "INFO"
-        
-        Write-Log "User Choice Protection Driver has been enabled successfully!" "SUCCESS"
-        Write-Log "⚠️  CRITICAL: Computer MUST be restarted for UCPD changes to take effect" "WARNING"
-        return $true
-    } catch {
-        Write-Log "Failed to Enabled User Choice Protection: $($_.Exception.Message)" "ERROR"
-        return $false
-    }
-}
 
 function Install-LogonTask {
     try {
@@ -1088,7 +1060,6 @@ function Install-LogonTask {
         
         Write-Log "Logon task installed successfully for all users" "SUCCESS"
         Write-Log "Task Name: $($Config.TaskName)" "INFO"
-        Write-Log "Trigger: At Logon (All Users)" "INFO"
         Write-Log "Script Path: $($Config.ScriptPath)" "INFO"
         return $true
     } catch {
@@ -1097,32 +1068,6 @@ function Install-LogonTask {
     return $false
 }
 
-# =============================================================================
-# IDEMPOTENCY FUNCTIONS
-# =============================================================================
-
-function Test-ConfigurationApplied {
-    $markerPath = "$env:APPDATA\DesktopConfigApplied.marker"
-    $currentVersion = "2.2"
-    
-    if (Test-Path $markerPath) {
-        $existingVersion = Get-Content $markerPath -ErrorAction SilentlyContinue
-        if ($existingVersion -eq $currentVersion) {
-            Write-Log "Configuration marker found: Version $currentVersion already applied" "INFO"
-            return $true
-        } else {
-            Write-Log "Configuration marker found but version mismatch: $existingVersion != $currentVersion" "INFO"
-        }
-    }
-    return $false
-}
-
-function Set-ConfigurationMarker {
-    $markerPath = "$env:APPDATA\DesktopConfigApplied.marker"
-    $currentVersion = "2.2"
-    Set-Content -Path $markerPath -Value $currentVersion -Force
-    Write-Log "Configuration marker created: $markerPath (Version: $currentVersion)" "SUCCESS"
-}
 
 function Set-ChromeDefaultPage {
     param(
@@ -1151,12 +1096,6 @@ function Set-ChromeDefaultPage {
                 Path = [Environment]::GetFolderPath("Desktop")
                 Name = "Google Chrome.lnk"
                 Description = "User Desktop"
-            },
-            # Public Desktop (All Users)
-            @{
-                Path = [Environment]::GetFolderPath("CommonDesktopDirectory")
-                Name = "Google Chrome.lnk"
-                Description = "Public Desktop"
             },
             # Current User Start Menu
             @{
@@ -1192,7 +1131,6 @@ function Set-ChromeDefaultPage {
         
         $WshShell = New-Object -ComObject WScript.Shell
         $modifiedCount = 0
-        $createdCount = 0
         
         foreach ($location in $shortcutLocations) {
             $fullPath = Join-Path $location.Path $location.Name
@@ -1202,56 +1140,39 @@ function Set-ChromeDefaultPage {
                 Write-Log "Location does not exist: $($location.Description) - $($location.Path)" "INFO"
                 continue
             }
-            
-            $shortcutExists = Test-Path $fullPath
-            
-            try {
-                # Create or modify the shortcut
-                $Shortcut = $WshShell.CreateShortcut($fullPath)
-                $Shortcut.TargetPath = $chromePath
-                $Shortcut.Arguments = $DefaultPage
-                $Shortcut.Description = "Google Chrome - Opens to $DefaultPage"
-                $Shortcut.WindowStyle = 1  # Normal window
-                $Shortcut.WorkingDirectory = Split-Path $chromePath
+            if (Test-Path $fullPath){
                 
-                # Set icon to Chrome's icon
-                $Shortcut.IconLocation = "$chromePath,0"
-                
-                $Shortcut.Save()
-                
-                if ($shortcutExists) {
-                    Write-Log "Modified existing shortcut: $($location.Description) - $fullPath" "SUCCESS"
-                    $modifiedCount++
-                } else {
-                    Write-Log "Created new shortcut: $($location.Description) - $fullPath" "SUCCESS"
-                    $createdCount++
+                try {
+                    # Create or modify the shortcut
+                    $Shortcut = $WshShell.CreateShortcut($fullPath)
+                    $Shortcut.TargetPath = $chromePath
+                    $Shortcut.Arguments = $DefaultPage
+                    $Shortcut.Description = "Google Chrome - Opens to $DefaultPage"
+                    $Shortcut.WindowStyle = 1  # Normal window
+                    $Shortcut.WorkingDirectory = Split-Path $chromePath
+                    
+                    # Set icon to Chrome's icon
+                    $Shortcut.IconLocation = "$chromePath,0"
+                    
+                    $Shortcut.Save()
+                    
+                    # Verify the shortcut was created/modified
+                    if (Test-Path $fullPath) {
+                        $verifyShortcut = $WshShell.CreateShortcut($fullPath)
+                        Write-Log "  Target: $($verifyShortcut.TargetPath)" "DEBUG"
+                        Write-Log "  Arguments: $($verifyShortcut.Arguments)" "DEBUG"
+                    }
                 }
-                
-                # Verify the shortcut was created/modified
-                if (Test-Path $fullPath) {
-                    $verifyShortcut = $WshShell.CreateShortcut($fullPath)
-                    Write-Log "  Target: $($verifyShortcut.TargetPath)" "DEBUG"
-                    Write-Log "  Arguments: $($verifyShortcut.Arguments)" "DEBUG"
+                catch {
+                    Write-Log "Failed to create/modify shortcut at $($location.Description): $($_.Exception.Message)" "WARNING"
                 }
-            }
-            catch {
-                Write-Log "Failed to create/modify shortcut at $($location.Description): $($_.Exception.Message)" "WARNING"
             }
         }
         
         # Clean up COM object
         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($WshShell) | Out-Null
         
-        Write-Log "Chrome shortcut configuration completed" "SUCCESS"
-        Write-Log "  Created: $createdCount shortcuts" "INFO"
-        Write-Log "  Modified: $modifiedCount shortcuts" "INFO"
-        Write-Log "  Total processed: $($createdCount + $modifiedCount) shortcuts" "INFO"
-        Write-Log "  Default page set to: $DefaultPage" "INFO"
-        
-        if (($createdCount + $modifiedCount) -eq 0) {
-            Write-Log "No Chrome shortcuts were found or created - Chrome may need to be launched once to create initial shortcuts" "WARNING"
-            return $false
-        }
+        Write-Log "Modified $modifiedCount Chrome shortcuts with default page: $DefaultPage" "SUCCESS"
         
         return $true
     }
@@ -1267,59 +1188,49 @@ function Set-ChromeDefaultPage {
 
 function Invoke-DesktopConfiguration {
     Write-Log "======================================" "INFO"
-    Write-Log "Starting desktop configuration v2.2..." "INFO"
+    Write-Log "Starting desktop configuration..." "INFO"
     Write-Log "======================================" "INFO"
     $startTime = Get-Date
     
-    # if (Test-ConfigurationApplied) {
-    #     Write-Log "Configuration already applied and up to date - skipping" "INFO"
-    #     return
-    # }
-    
     $results = @()
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 1: Wallpaper Configuration ---" "INFO"
-    # $results += Set-Wallpaper -Path $Config.WallpaperPath
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 1: Wallpaper Configuration ---" "INFO"
+    $results += Set-Wallpaper -Path $Config.WallpaperPath
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 2: Lock Screen Configuration ---" "INFO"
-    # $results += Set-LockScreen -Path $Config.LockScreenPath
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 2: Lock Screen Configuration ---" "INFO"
+    $results += Set-LockScreen -Path $Config.LockScreenPath
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 3: Screensaver Configuration ---" "INFO"
-    # $results += Set-Screensaver -ImagePath $Config.ScreensaverPath -TimeoutSeconds $Config.ScreensaverTimeout
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 3: Screensaver Configuration ---" "INFO"
+    $results += Set-Screensaver -ImagePath $Config.ScreensaverPath -TimeoutSeconds $Config.ScreensaverTimeout
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 4: Chrome Default Browser (Protocols) ---" "INFO"
-    # $results += Set-DefaultBrowser
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 4: Chrome Default Browser (Protocols) ---" "INFO"
+    $results += Set-DefaultBrowser
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 5: Chrome File Associations ---" "INFO"
-    # $results += Set-DefaultBrowserFileAssociations
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 5: Chrome File Associations ---" "INFO"
+    $results += Set-DefaultBrowserFileAssociations
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 6: Outlook Default Email Client ---" "INFO"
-    # $results += Set-DefaultEmailClient
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 6: Outlook Default Email Client ---" "INFO"
+    $results += Set-DefaultEmailClient
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 7: Remove Edge from Taskbar ---" "INFO"
-    # $results += Remove-EdgeFromTaskbar
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 7: Remove Edge from Taskbar ---" "INFO"
+    $results += Remove-EdgeFromTaskbar
     
-    # Write-Log "" "INFO"
-    # Write-Log "--- STEP 8: Configure Taskbar Pins ---" "INFO"
-    # $results += Set-TaskbarPins
+    Write-Log "" "INFO"
+    Write-Log "--- STEP 8: Configure Taskbar Pins ---" "INFO"
+    $results += Set-TaskbarPins
     
-    # Write-Log "" "INFO"
-    # Set-ConfigurationMarker
-
     Write-Log "" "INFO"
     Write-Log "--- STEP 9: Configure Chrome Homepage ---" "INFO"
     $results += Set-ChromeDefaultPage -DefaultPage $Config.ChromeHomepage
     
-    Start-Sleep -Seconds 3
-    Enable-UserChoiceProtection
-    
+
     $endTime = Get-Date
     $duration = ($endTime - $startTime).TotalSeconds
     $successCount = ($results | Where-Object {$_ -eq $true}).Count

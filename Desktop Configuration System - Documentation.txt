@@ -1,10 +1,6 @@
-# Desktop Configuration System - Complete Documentation
-
-**Version:** 2.2  
-**Compatible with:** Windows 10 Pro, Windows 11 Pro  
-**Last Updated:** October 2025
-
----
+Desktop Configuration System - Documentation
+Last Updated: October 2025
+Compatible: Windows 10 Pro, Windows 11 Pro
 
 ## Table of Contents
 
@@ -18,1199 +14,381 @@
 9. [Logs and Troubleshooting]
 10. [Rollback/Uninstall Steps]
 
----
+1. Overview
+This automated desktop configuration system enforces corporate standards across Windows workstations. The system runs automatically at every user logon to maintain consistent settings, even if users attempt to modify them.
+What It Configures
 
-## Overview
+Desktop wallpaper and lock screen (enforced)
+Company screensaver with timeout and password protection
+Chrome as default web browser (HTTP/HTTPS protocols + .htm/.html/.pdf files)
+Chrome homepage (company website)
+Outlook as default email client (mailto: protocol)
+Taskbar application pins (Chrome, Word, Excel, Teams, Planner)
+Edge browser removal from taskbar
 
-This automated desktop configuration system deploys corporate standards across Windows workstations without requiring end users to have administrator privileges. The system uses a one-time administrative installation that creates a scheduled task running at highest privilege, which then configures all users automatically at logon.
+Key Features
 
-**✅ CONFIRMATION: Standard users do NOT need administrator rights for this solution to work. Only the initial installation requires admin privileges.**
+✅ Enforces settings every logon - User changes are automatically reverted
+✅ No admin rights required - Runs for standard users
+✅ Fast execution - Completes in under 30 seconds
+✅ Complete audit trail - All changes logged with CSV export
+✅ Local image storage - No network dependencies
 
-### What It Configures
 
-- Desktop wallpaper and lock screen
-- Company screensaver with timeout and password protection
-- Chrome as default web browser (HTTP/HTTPS/FTP protocols + .htm/.html/.xhtml files)
-- Outlook as default email client (mailto: protocol)
-- Taskbar application pins (Chrome, Word, Excel, Teams, Planner)
-- Edge browser removal from taskbar (WebView2 preserved)
+2. How It Works
+Deployment Architecture
+┌─────────────────────────────────────────────────────────┐
+│ INSTALLATION PHASE (One-time, Administrator Required)  │
+├─────────────────────────────────────────────────────────┤
+│  1. Prepare deployment folder with images:             │
+│     deployment-folder/                                  │
+│     ├── Deploy.bat                                     │
+│     ├── DesktopConfig.ps1                             │
+│     ├── wallpaper.jpg      ← Add your images          │
+│     ├── lockscreen.jpg     ← Add your images          │
+│     └── screensaver.jpg    ← Add your images          │
+│                                                         │
+│  2. Run Deploy.bat as Administrator                    │
+│     ↓                                                   │
+│  3. Deploy.bat creates C:\Scripts\ and C:\Scripts\Images\ │
+│     ↓                                                   │
+│  4. Deploy.bat copies:                                 │
+│     - DesktopConfig.ps1 → C:\Scripts\                 │
+│     - wallpaper.jpg → C:\Scripts\Images\              │
+│     - lockscreen.jpg → C:\Scripts\Images\             │
+│     - screensaver.jpg → C:\Scripts\Images\            │
+│     ↓                                                   │
+│  5. Script disables UCPD (registry modification)       │
+│     ↓                                                   │
+│  6. Script creates scheduled task                      │
+│     ↓                                                   │
+│  7. ⚠️ RESTART COMPUTER (mandatory)                   │
+└─────────────────────────────────────────────────────────┘
 
-### Key Features
+┌─────────────────────────────────────────────────────────┐
+│ ENFORCEMENT PHASE (Every User Logon - Automatic)       │
+├─────────────────────────────────────────────────────────┤
+│  1. User logs in (standard account)                    │
+│     ↓                                                   │
+│  2. Scheduled task triggers (hidden, highest privilege)│
+│     ↓                                                   │
+│  3. Script runs configuration (no idempotency check)   │
+│     ↓                                                   │
+│  4. All settings applied/enforced (15-30 seconds)      │
+│     ✓ Wallpaper reset                                  │
+│     ✓ Lock screen reset                                │
+│     ✓ Screensaver enforced                             │
+│     ✓ Chrome defaults enforced                         │
+│     ✓ Chrome homepage set                              │
+│     ✓ Outlook default email                            │
+│     ✓ Taskbar pins restored                            │
+│     ↓                                                   │
+│  5. Explorer restarts (applies taskbar changes)        │
+│     ↓                                                   │
+│  6. Changes logged to CSV and text log                 │
+│     ↓                                                   │
+│  7. User sees corporate desktop                        │
+│                                                         │
+│  ⚠️ UCPD REMAINS DISABLED (allows enforcement)        │
+└─────────────────────────────────────────────────────────┘
 
-- **Idempotent**: Safe to run multiple times without duplication
-- **Fast**: Completes in under 30 seconds on typical hardware
-- **Persistent**: Settings survive logoffs, reboots, and profile changes
-- **Logged**: Complete audit trail of all changes with CSV export
-- **No Admin Required**: End users need zero administrative rights
+3. Prerequisites
+System Requirements
 
----
+Windows 10 Pro or Windows 11 Pro
+PowerShell 5.1+ (pre-installed)
+Administrator access (installation only)
+Minimum 10 MB free disk space
 
-## How It Works
+Required Applications
 
-### Deployment Architecture
+Google Chrome (installed)
+Microsoft Office 2013/2016/2019/2021/365
+Microsoft Teams (optional)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ PHASE 1: ONE-TIME INSTALLATION (Run as Administrator)      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. IT Admin runs Deploy.bat as Administrator              │
-│     ↓                                                       │
-│  2. Deploy.bat copies files to C:\Scripts\                 │
-│     - DesktopConfig.ps1                                    │
-│     - DesktopConfigTask.xml                                │
-│     ↓                                                       │
-│  3. Deploy.bat calls: DesktopConfig.ps1 -Install           │
-│     ↓                                                       │
-│  4. Script disables User Choice Protection Driver (UCPD)   │
-│     - Modifies registry: HKLM:\SYSTEM\...\Services\UCPD    │
-│     - Disables scheduled task: UCPD velocity               │
-│     ↓                                                       │
-│  5. Script creates scheduled task: "DesktopConfiguration"  │
-│     - Trigger: At logon (any user)                         │
-│     - Principal: BUILTIN\Users with highest privilege      │
-│     - Action: PowerShell -File C:\Scripts\DesktopConfig.ps1│
-│     ↓                                                       │
-│  6. ⚠️ COMPUTER RESTART REQUIRED (for UCPD changes)       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│ PHASE 2: AUTOMATIC EXECUTION (At Every User Logon)         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. User logs into Windows (standard user account)         │
-│     ↓                                                       │
-│  2. Scheduled task triggers automatically                   │
-│     - Runs with highest privilege                          │
-│     - Hidden window (no user interruption)                 │
-│     ↓                                                       │
-│  3. Script checks idempotency marker                        │
-│     - Location: %APPDATA%\DesktopConfigApplied.marker     │
-│     - Version: 2.2                                         │
-│     - If found and version matches → EXIT (already done)   │
-│     ↓                                                       │
-│  4. Script applies 8 configuration steps:                   │
-│     ✓ Set wallpaper                                        │
-│     ✓ Set lock screen                                      │
-│     ✓ Configure screensaver                                │
-│     ✓ Set Chrome as default browser (protocols)            │
-│     ✓ Set Chrome file associations (.htm/.html/.xhtml)     │
-│     ✓ Set Outlook as default email client                  │
-│     ✓ Remove Edge from taskbar                             │
-│     ✓ Pin applications to taskbar                          │
-│     ↓                                                       │
-│  5. Script restarts Windows Explorer                        │
-│     - Applies taskbar changes immediately                   │
-│     ↓                                                       │
-│  6. Script logs all changes                                 │
-│     - Main log: %TEMP%\DesktopConfig.log                   │
-│     - Registry CSV: %TEMP%\DesktopConfig_RegistryChanges_*.csv │
-│     ↓                                                       │
-│  7. Script creates idempotency marker                       │
-│     - Prevents re-running on next logon                     │
-│     ↓                                                       │
-│  8. User sees configured desktop (within 30 seconds)        │ 
-│      ↓                                                      │
-│  9. Script enables User Choice Protection Driver (UCPD)     │
-
-   10. ⚠️ COMPUTER RESTART REQUIRED (for UCPD changes)        │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Execution Flow Details
-
-**Installation Phase:**
-1. **Deploy.bat** runs with administrator privileges
-2. Copies PowerShell script and XML to `C:\Scripts\`
-3. Executes PowerShell script with `-Install` parameter
-4. Script disables UCPD service and task (registry modification)
-5. Script creates scheduled task for "Any User" logon
-6. Prompts for computer restart (mandatory)
-
-**Configuration Phase (At User Logon):**
-1. Windows logs in user (standard account, no admin rights)
-2. Task Scheduler triggers `DesktopConfiguration` task
-3. PowerShell script runs hidden with highest privilege
-4. Script checks for version marker file
-5. If not present or version mismatch → Apply configuration
-6. Script applies all 8 configuration steps sequentially
-7. **Explorer.exe restart happens AFTER taskbar configuration**
-8. Script logs all registry changes to CSV
-9. Script creates version marker file
-10. Script exits silently
-
-### Why "Highest Privilege" for Standard Users?
-
-The scheduled task runs with **"Run with highest privileges"** option, which means:
-- For admin users: Runs with full admin token
-- For standard users: Runs with their highest available privilege (still standard user)
-- The task can access system-wide registry hives (HKU\) by loading/unloading them
-- User doesn't need UAC elevation
-- Settings persist across all users without requiring admin logon
-
----
-
-## Prerequisites
-
-### System Requirements
-- **Operating System**: Windows 10 Pro or Windows 11 Pro
-- **PowerShell**: Version 5.1 or later (pre-installed on Windows 10/11)
-- **Administrator Access**: Required for one-time installation only
-- **Disk Space**: ~5 MB for scripts and log files
-- **Applications Required**:
-  - Google Chrome (installed)
-  - Microsoft Office 2013/2016/2019/2021/365 (Outlook, Word, Excel)
-  - Microsoft Teams (optional, script handles if missing)
-
-### Network Requirements
-- Access to file share for wallpaper/lock screen images (UNC path)
-- Ability to copy screensaver images locally to `C:\CompanyImages`
-
-### File Structure
-Ensure you have these files before installation:
-```
+Required Files Before Installation
 deployment-folder/
-├── Deploy.bat                 # Automated deployment script (Run as Admin)
+├── Deploy.bat                 # Deployment script
 ├── DesktopConfig.ps1          # Main PowerShell script
-├── DesktopConfigTask.xml      # Scheduled task definition (optional)
-└── Desktop Configuration System - Documentation                  # This documentation
-```
+├── wallpaper.jpg              # ⚠️ MUST ADD - Company wallpaper
+├── lockscreen.jpg             # ⚠️ MUST ADD - Company lock screen
+└── screensaver.jpg            # ⚠️ MUST ADD - Company screensaver
+⚠️ CRITICAL: You MUST add the three image files (wallpaper.jpg, lockscreen.jpg, screensaver.jpg) to the deployment folder BEFORE running Deploy.bat.
+Image Specifications:
 
----
+Format: JPEG (recommended) or PNG
+Wallpaper: 1920x1080 or higher (16:9 aspect ratio)
+Lock Screen: 1920x1080 or higher
+Screensaver: Any resolution (will be resized)
+File Size: Under 5MB each for performance
 
-## Installation Steps
 
-### Method 1: Automated Deployment with Deploy.bat (Recommended)
+4. Installation Steps
+Step 1: Prepare Deployment Package
 
-This is the primary deployment method.
+Create deployment folder (e.g., C:\Temp\DesktopDeploy\)
+Copy these files to the folder:
 
-#### Step 1: Prepare Files
-1. Extract all deployment files to a folder (e.g., `C:\Temp\DesktopConfig\`)
-2. Verify all required files are present:
-   - `Deploy.bat`
-   - `DesktopConfig.ps1`
-   - `DesktopConfigTask.xml`
+Deploy.bat
+DesktopConfig.ps1
 
-#### Step 2: Run Deployment
-1. **Right-click** `Deploy.bat`
-2. Select **"Run as administrator"**
-3. The batch file will:
-   - Check for admin privileges
-   - Create `C:\Scripts\` directory
-   - Copy `DesktopConfig.ps1` to `C:\Scripts\`
-   - Copy `DesktopConfigTask.xml` to `C:\Scripts\`
-   - Execute PowerShell installation
 
-#### Step 3: PowerShell Installation Process
-The script automatically:
-1. **Disables User Choice Protection Driver (UCPD)**
-   - Modifies registry: `HKLM:\SYSTEM\CurrentControlSet\Services\UCPD`
-   - Sets `Start` value to `4` (Disabled)
-   - Disables scheduled task: `\Microsoft\Windows\AppxDeploymentClient\UCPD velocity`
+⚠️ ADD YOUR IMAGE FILES:
 
-2. **Creates Scheduled Task**
-   - Task Name: `DesktopConfiguration`
-   - Trigger: At logon (any user)
-   - Security: BUILTIN\Users with highest privilege
-   - Action: `PowerShell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\Scripts\DesktopConfig.ps1" -Configure`
+wallpaper.jpg - Your company wallpaper
+lockscreen.jpg - Your company lock screen image
+screensaver.jpg - Your company screensaver image
 
-3. **Prompts for Restart**
-   - Offers immediate restart (10 second countdown)
-   - Or manual restart later
 
-#### Step 4: ⚠️ MANDATORY COMPUTER RESTART
+Verify all 5 files are present:
 
-**You MUST restart the computer after installation.**
-
-```
-Why Restart is Required:
-- UCPD service runs at kernel level
-- Service changes require system restart to take effect
-- Without restart, Chrome/Outlook associations will be blocked
-- File associations (.htm, .html, .xhtml) will not persist
-```
-
-**After Restart:**
-- UCPD disabling becomes active
-- Browser/email associations become manageable
-- System is ready for user configuration
-
-#### Step 5: Verify Installation
-1. **Open Task Scheduler** (`taskschd.msc`)
-2. Navigate to **Task Scheduler Library**
-3. Confirm **"DesktopConfiguration"** task exists
-4. Verify task properties:
-   - Status: **Ready**
-   - Trigger: **At log on of any user**
-   - Run with highest privileges: **Enabled**
-
-5. **Check Script Location**
-   ```powershell
-   Test-Path "C:\Scripts\DesktopConfig.ps1"
-   # Should return: True
-   ```
-
-6. **Verify UCPD Status**
-   ```powershell
-   Get-Service UCPD
-   # Should show: Status=Stopped, StartType=Disabled
-   ```
-
-### Method 3: Task Scheduler XML Import
-
-If PowerShell installation fails, import task manually:
-
-1. Copy files to `C:\Scripts\`
-2. Open Task Scheduler (`taskschd.msc`)
-3. Right-click **Task Scheduler Library**
-4. Select **Import Task**
-5. Browse to `C:\Scripts\DesktopConfigTask.xml`
-6. Click **OK**
-7. Manually disable UCPD:
-   ```powershell
-   Set-Service -Name UCPD -StartupType Disabled
-   Disable-ScheduledTask -TaskName "\Microsoft\Windows\AppxDeploymentClient\UCPD velocity"
-   ```
-8. Restart computer
-
----
-
-## Configuration Parameters
-
-Before deployment, you **MUST** customize the `$Config` hashtable in `DesktopConfig.ps1` (lines 46-68). Each parameter must be configured for your corporate environment.
-
-### Quick Reference Table
-
-| Parameter | Type | Required | Default | Purpose |
-|-----------|------|----------|---------|---------|
-| `WallpaperPath` | String (UNC/Local) | Yes | `\\server\share\company-wallpaper.jpg` | Desktop wallpaper image |
-| `LockScreenPath` | String (UNC/Local) | Yes | `\\server\share\company-lockscreen.jpg` | Lock screen image |
-| `ScreensaverPath` | String (Local only) | Yes | `C:\CompanyImages` | Screensaver image folder |
-| `ScreensaverTimeout` | Integer (seconds) | Yes | `600` | Idle time before screensaver |
-| `ScreensaverPasswordRequired` | Boolean | Yes | `$true` | Require password after screensaver |
-| `ChromePath` | String (Path) | Yes | `C:\Program Files\Google\Chrome\...` | Chrome executable location |
-| `OutlookPath` | String (Path) | Yes | `C:\Program Files\Microsoft Office\...` | Outlook executable location |
-| `WordPath` | String (Path) | Yes | `C:\Program Files\Microsoft Office\...` | Word executable (taskbar pin) |
-| `ExcelPath` | String (Path) | Yes | `C:\Program Files\Microsoft Office\...` | Excel executable (taskbar pin) |
-| `TeamsPath` | String (Path) | Optional | `%LOCALAPPDATA%\Microsoft\Teams\...` | Teams executable (taskbar pin) |
-| `PlannerUrl` | String (URL) | Optional | `https://planner.microsoft.com` | Planner web app URL |
-| `TaskName` | String | No | `DesktopConfiguration` | Scheduled task name |
-| `ScriptPath` | String (Auto) | No | Auto-detected | Current script path |
-
-### Detailed Parameter Descriptions
-
-#### `WallpaperPath`
-```powershell
-WallpaperPath = "\\server\share\company-wallpaper.jpg"
-```
-- **Purpose**: Sets the corporate desktop wallpaper for all users
-- **Format**: UNC network path or local path
-- **Requirements**: 
-  - Image must be accessible to all users (network share permissions)
-  - Supported formats: JPG, PNG, BMP
-  - Recommended resolution: 1920x1080 or higher (16:9 aspect ratio)
-  - File size: Keep under 5MB for performance
-- **Examples**:
-  - Network share: `\\fileserver\CompanyAssets\Images\wallpaper.jpg`
-  - Local path: `C:\CompanyBranding\wallpaper.jpg`
-- **Notes**: 
-  - UNC paths require network connectivity at logon
-  - Local paths are faster but require deployment to each machine
-  - Wallpaper is applied via Windows API (SystemParametersInfo)
-
-#### `LockScreenPath`
-```powershell
-LockScreenPath = "\\server\share\company-lockscreen.jpg"
-```
-- **Purpose**: Sets the Windows lock screen image (Ctrl+Alt+Del screen)
-- **Format**: UNC network path or local path
-- **Requirements**:
-  - Must be accessible to all users
-  - Supported formats: JPG, PNG
-  - Recommended resolution: 1920x1080 or higher
-  - Different image from wallpaper (recommended)
-- **Examples**:
-  - Network: `\\fileserver\CompanyAssets\Images\lockscreen.jpg`
-  - Local: `C:\CompanyBranding\lockscreen.jpg`
-- **Notes**: 
-  - When run as admin during task: Applies system-wide and locks user changes
-  - When run as user: Applies per-user only
-  - Registry key: `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP\LockScreenImagePath`
-
-#### `ScreensaverPath`
-```powershell
-ScreensaverPath = "C:\CompanyImages"
-```
-- **Purpose**: Folder containing images for the photo slideshow screensaver
-- **Format**: **Local directory path only** (UNC paths NOT supported)
-- **Requirements**:
-  - MUST be a local path (network paths don't work for screensavers)
-  - Directory must exist and contain image files
-  - Images: JPG, PNG, BMP formats
-  - All users must have read access to the folder
-- **Examples**:
-  - `C:\CompanyBranding\ScreensaverImages`
-  - `C:\Windows\Web\Screen\CompanyImages`
-  - `D:\Assets\Screensaver`
-- **Deployment Strategy**:
-  - Copy images to local machine during deployment
-  - Use Deploy.bat or GPO startup script to copy files
-  - Or embed images in installation package
-- **Registry Keys Modified**:
-  - `HKCU:\Software\Microsoft\Windows Photo Viewer\Slideshow\Screensaver\EncryptedPIDL`
-
-#### `ScreensaverTimeout`
-```powershell
-ScreensaverTimeout = 600
-```
-- **Purpose**: Time in seconds before screensaver activates after user inactivity
-- **Format**: Integer (seconds)
-- **Common Values**:
-  - `300` = 5 minutes (high security environments)
-  - `600` = 10 minutes (balanced - **recommended**)
-  - `900` = 15 minutes (standard office)
-  - `1200` = 20 minutes (relaxed policy)
-  - `1800` = 30 minutes (minimal interruption)
-- **Compliance Considerations**:
-  - Many security frameworks (ISO 27001, NIST, PCI-DSS) recommend ≤15 minutes
-  - Healthcare (HIPAA): ≤10 minutes recommended
-  - Financial (PCI-DSS): ≤15 minutes required
-- **Registry Key**: `HKCU:\Control Panel\Desktop\ScreenSaveTimeOut`
-
-#### `ScreensaverPasswordRequired`
-```powershell
-ScreensaverPasswordRequired = $true
-```
-- **Purpose**: Require password to unlock computer from screensaver
-- **Format**: Boolean (`$true` or `$false`)
-- **Values**:
-  - `$true` = Password required (**highly recommended for security**)
-  - `$false` = No password required (not recommended)
-- **Security Impact**:
-  - `$true`: Prevents unauthorized access to unattended workstations
-  - `$false`: Anyone can access the computer by moving the mouse
-- **Compliance**: Most security frameworks require `$true`
-- **Registry Key**: `HKCU:\Control Panel\Desktop\ScreenSaverIsSecure`
-
-#### `ChromePath`
-```powershell
-ChromePath = "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe"
-```
-- **Purpose**: Full path to Google Chrome executable
-- **Format**: Full file path to `chrome.exe`
-- **Default Locations**:
-  - 64-bit system: `C:\Program Files\Google\Chrome\Application\chrome.exe`
-  - 32-bit installation on 64-bit: `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`
-  - Per-user installation: `%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe`
-- **Notes**: 
-  - Script auto-checks if Chrome exists before configuration
-  - If not found, Chrome-related steps are skipped with warnings
-  - Used for: Default browser, file associations, Planner PWA shortcut
-
-#### `OutlookPath`
-```powershell
-OutlookPath = "${env:ProgramFiles}\Microsoft Office\root\Office16\OUTLOOK.EXE"
-```
-- **Purpose**: Full path to Microsoft Outlook executable
-- **Format**: Full file path to `OUTLOOK.EXE`
-- **Office Versions**:
-  - Office 2021/2019/2016/365: `\root\Office16\OUTLOOK.EXE`
-  - Office 2013: `\root\Office15\OUTLOOK.EXE`
-  - Office 2010: `\Office14\OUTLOOK.EXE` (may not work with UCPD method)
-- **Example Paths**:
-  - Click-to-Run: `C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE`
-  - MSI Install: `C:\Program Files\Microsoft Office\Office16\OUTLOOK.EXE`
-  - 32-bit on 64-bit: `C:\Program Files (x86)\Microsoft Office\root\Office16\OUTLOOK.EXE`
-- **Notes**: 
-  - Script uses ProgID: `Outlook.URL.mailto.15` (hardcoded for compatibility)
-  - Adjust path based on your Office version
-  - If not found, email client configuration is skipped
-
-#### `WordPath`, `ExcelPath`
-```powershell
-WordPath = "${env:ProgramFiles}\Microsoft Office\root\Office16\WINWORD.EXE"
-ExcelPath = "${env:ProgramFiles}\Microsoft Office\root\Office16\EXCEL.EXE"
-```
-- **Purpose**: Paths to Word and Excel for taskbar pinning
-- **Format**: Full file paths to `WINWORD.EXE` and `EXCEL.EXE`
-- **Office Versions**: Same as Outlook (Office15 vs Office16)
-- **Notes**: 
-  - Used only for taskbar pin configuration
-  - If not found, those apps are skipped in taskbar layout
-  - Does NOT affect default file associations
-
-#### `TeamsPath`
-```powershell
-TeamsPath = "${env:LOCALAPPDATA}\Microsoft\Teams\current\Teams.exe"
-```
-- **Purpose**: Path to Microsoft Teams application
-- **Format**: Full file path to `Teams.exe`
-- **Teams Versions**:
-  - New Teams (v2): `%LOCALAPPDATA%\Microsoft\Teams\current\Teams.exe`
-  - Classic Teams: `%ProgramFiles(x86)%\Microsoft\Teams\current\Teams.exe`
-  - UWP Teams: Auto-detected from AppX package
-- **Notes**: 
-  - Script automatically checks all three locations
-  - If none found, Teams pin is skipped with warning
-  - Not required - optional application
-
-#### `PlannerUrl`
-```powershell
-PlannerUrl = "https://planner.microsoft.com"
-```
-- **Purpose**: URL for Microsoft Planner web app shortcut
-- **Format**: Full HTTPS URL
-- **How It Works**:
-  - Script creates Chrome PWA shortcut: `chrome.exe --app=<URL>`
-  - Shortcut saved to: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Microsoft Planner.lnk`
-  - Shortcut pinned to taskbar
-- **Other Examples**:
-  - SharePoint: `https://company.sharepoint.com`
-  - Power BI: `https://app.powerbi.com`
-  - Custom intranet: `https://intranet.company.com/portal`
-- **Notes**: Requires Chrome to be installed
-
-### Example Configuration
-
-Here's a complete example configuration:
-
-```powershell
-$Config = @{
-    # Corporate branding images
-    WallpaperPath = "\\fileserver\IT\Branding\Wallpaper_2025_1920x1080.jpg"
-    LockScreenPath = "\\fileserver\IT\Branding\LockScreen_2025_1920x1080.jpg"
-    ScreensaverPath = "C:\ProgramData\CompanyBranding\Screensaver"
-    
-    # Security settings - Compliant with ISO 27001
-    ScreensaverTimeout = 600  # 10 minutes
-    ScreensaverPasswordRequired = $true
-    
-    # Application paths - Office 365 Click-to-Run
-    ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-    OutlookPath = "C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE"
-    WordPath = "C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"
-    ExcelPath = "C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"
-    TeamsPath = "$env:LOCALAPPDATA\Microsoft\Teams\current\Teams.exe"
-    
-    # Corporate web apps
-    PlannerUrl = "https://tasks.office.com"  # Microsoft To Do/Planner
-    
-    # System (do not modify)
-    TaskName = "DesktopConfiguration"
-    ScriptPath = $PSCommandPath
-}
-```
-
----
-
-## Post-Installation
-
-### What Happens Immediately After Installation?
-
-1. **Scheduled Task Created**
-   - Task name: `DesktopConfiguration`
-   - Located in: Task Scheduler Library (root)
-   - Visible in: `taskschd.msc`
-
-2. **UCPD Service Disabled**
-   - Service status: Stopped
-   - Startup type: Disabled
-   - Registry modified: `HKLM:\SYSTEM\CurrentControlSet\Services\UCPD\Start = 4`
-
-3. **UCPD Scheduled Task Disabled**
-   - Task: `\Microsoft\Windows\AppxDeploymentClient\UCPD velocity`
-   - State: Disabled
-
-4. **Files Deployed**
-   - Script: `C:\Scripts\DesktopConfig.ps1`
-   - XML: `C:\Scripts\DesktopConfigTask.xml` (optional)
-
-5. **Registry Changes Logged**
-   - Log: `%TEMP%\DesktopConfig.log`
-   - CSV: `%TEMP%\DesktopConfig_RegistryChanges_*.csv`
-
-### After Computer Restart (Required)
-
-**UCPD Changes Take Effect:**
-- Service remains stopped
-- Browser/email associations become manageable
-- System ready for user configuration
-
-### At Next User Logon
-
-**Automatic Configuration Executes:**
-
-1. **Task Triggers** (0-2 seconds after logon)
-   - Runs hidden in background
-   - No user interaction required
-   - Appears briefly in Task Manager
-
-2. **Configuration Applies** (5-30 seconds)
-   - Wallpaper changes immediately
-   - Lock screen updates
-   - Screensaver configured
-   - Chrome becomes default browser
-   - Outlook becomes default email
-   - Edge removed from taskbar
-   - New taskbar pins appear
-
-3. **Explorer Restarts** (2-3 seconds)
-   - **Happens AFTER taskbar configuration**
-   - All windows close briefly
-   - Taskbar refreshes with new pins
-   - Desktop reappears
-
-4. **Configuration Completes**
-   - Marker file created: `%APPDATA%\DesktopConfigApplied.marker`
-   - Logs written to `%TEMP%\`
-   - Script exits silently
-5. **Re-enable the UCPD**
-   - Restart computer is mandatory
-
-### Testing the Installation
-
-**Test with Standard User Account:**
-
-1. **Create Test User** (if needed)
-   ```powershell
-   net user testuser P@ssw0rd /add
-   net localgroup Users testuser /add
-   ```
-
-2. **Log Off Current Session**
-   - Press `Windows + L`
-   - Click "Sign out"
-
-3. **Log In as Test User**
-   - Use standard user credentials
-   - **Do not** use administrator account for testing
-
-4. **Wait 30 Seconds**
-   - Configuration runs automatically
-   - Desktop changes appear
-
-5. **Verify Settings Applied:**
-   - ✅ Desktop wallpaper changed to company image
-   - ✅ Lock screen image updated (press `Windows + L` to check)
-   - ✅ Chrome opens for HTTP links (test: click email link)
-   - ✅ Outlook opens for mailto links (test: click email address)
-   - ✅ Taskbar contains: Chrome, Word, Excel, Teams, Planner
-   - ✅ Edge not pinned to taskbar
-   - ✅ Screensaver activates after timeout
-
-6. **Check Logs**
-   ```powershell
-   # View main log
-   notepad $env:TEMP\DesktopConfig.log
+   Dir C:\Temp\DesktopDeploy\
    
-   # View registry changes CSV
-   ii $env:TEMP\DesktopConfig_RegistryChanges_*.csv
-   ```
-
-7. **Verify Idempotency**
-   - Log off and back on
-   - Configuration should skip (already applied)
-   - Check log: "Configuration already applied and up to date"
-
----
-
-## User Experience
-
-### What Users Will Experience
-
-#### First Logon After Installation
-
-**Timeline:**
-
-```
-User Logon
-│
-├─ 0-2 seconds: Scheduled task triggers
-├─ 2-5 seconds: Script starts (hidden)
-├─ 5-10 seconds: Wallpaper changes (visible immediately)
-├─ 10-20 seconds: Browser/email associations set (silent)
-├─ 20-25 seconds: Taskbar pins configured
-├─ 25-27 seconds: Explorer restarts (brief screen flicker)
-└─ 27-30 seconds: Complete - new taskbar visible
-```
-
-**What Users See:**
-1. Desktop wallpaper changes immediately after logon
-2. Brief (2-3 second) screen flicker when Explorer restarts
-3. Taskbar appears with new application pins
-4. No error messages or prompts
-5. No interruption to work
-
-**What Users Don't See:**
-- PowerShell windows (hidden)
-- UAC prompts (none required)
-- Error messages (logged silently)
-- Task Scheduler notifications
-
-#### Subsequent Logons
-
-- Configuration does NOT re-run
-- Settings persist
-- Logon speed normal (no delays)
-- Marker file prevents re-execution
-
-
-### Performance Impact
-
-- **First Logon**: +5-30 seconds (one-time)
-- **Subsequent Logons**: No impact (0 seconds)
-- **System Resources**: Minimal (script runs briefly then exits)
-- **Network Impact**: Low (only loads wallpaper/lock screen images)
-
----
-
-## Registry Changes Documentation
-
-### Overview
-
-The script creates comprehensive audit logs of **ALL registry modifications**. This ensures:
-- Complete transparency for IT audits
-- Compliance with change management policies
-- Troubleshooting capabilities
-- Rollback documentation
-
-### Registry Logging System
-
-**Three Logging Levels:**
-
-1. **Action Types Tracked:**
-   - `PATH_CREATED` - New registry paths created
-   - `CREATED` - New registry values created
-   - `MODIFIED` - Existing registry values changed
-
-2. **Information Captured:**
-   - Timestamp (yyyy-MM-dd HH:mm:ss)
-   - Action type
-   - Full registry path
-   - Value name
-   - Value type (String, DWord, Binary, etc.)
-   - Old value (for modifications)
-   - New value
-
-3. **Output Formats:**
-   - **Console**: Real-time display during execution
-   - **Log file**: Detailed text log with all changes
-   - **CSV export**: Spreadsheet-friendly format for analysis
-
-### Registry Changes by Function
-
-#### 1. Lock Screen Configuration
-
-**When Admin-Locked (System-Wide):**
-
-| Action | Registry Path | Value Name | Type | Purpose |
-|--------|--------------|------------|------|---------|
-| PATH_CREATED | `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP` | N/A | Path | Creates CSP policy key |
-| MODIFIED/CREATED | `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP` | `LockScreenImagePath` | String | Sets lock screen image path |
-
-**When User-Specific (Fallback):**
-
-| Action | Registry Path | Value Name | Type | Purpose |
-|--------|--------------|------------|------|---------|
-| PATH_CREATED | `HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lock Screen\Creative` | N/A | Path | Creates lock screen key |
-| CREATED | `HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lock Screen\Creative` | `LandscapeAssetPath` | String | Sets landscape lock screen |
-| CREATED | `HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lock Screen\Creative` | `PortraitAssetPath` | String | Sets portrait lock screen |
-
-#### 2. Screensaver Configuration
-
-| Action | Registry Path | Value Name | Type | Old Value | New Value | Purpose |
-|--------|--------------|------------|------|-----------|-----------|---------|
-| MODIFIED/CREATED | `HKCU:\Control Panel\Desktop` | `ScreenSaveActive` | String | "0" | "1" | Enables screensaver |
-| MODIFIED/CREATED | `HKCU:\Control Panel\Desktop` | `ScreenSaveTimeOut` | String | varies | "600" | Sets timeout (seconds) |
-| MODIFIED/CREATED | `HKCU:\Control Panel\Desktop` | `SCRNSAVE.EXE` | String | varies | "C:\Windows\System32\PhotoScreensaver.scr" | Sets screensaver program |
-| MODIFIED/CREATED | `HKCU:\Control Panel\Desktop` | `ScreenSaverIsSecure` | String | "0" | "1" | Requires password |
-| PATH_CREATED | `HKCU:\Software\Microsoft\Windows Photo Viewer\Slideshow\Screensaver` | N/A | Path | N/A | N/A | Creates photo viewer key |
-| CREATED | `HKCU:\Software\Microsoft\Windows Photo Viewer\Slideshow\Screensaver` | `EncryptedPIDL` | String | N/A | Base64 string | Sets image folder location |
-
-#### 3. Chrome Default Browser (Protocols)
-
-**For Each User Profile (http, https, ftp):**
-
-| Action | Registry Path | Value Name | Type | Purpose |
-|--------|--------------|------------|------|---------|
-| PATH_CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice` | N/A | Path | Creates protocol association key |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice` | `Hash` | String | Windows security hash for validation |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice` | `ProgId` | String | "ChromeHTML" - Links to Chrome handler |
-| PATH_CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice` | N/A | Path | Creates protocol association key |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice` | `Hash` | String | Windows security hash |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice` | `ProgId` | String | "ChromeHTML" |
-| PATH_CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\ftp\UserChoice` | N/A | Path | Creates protocol association key |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\ftp\UserChoice` | `Hash` | String | Windows security hash |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\ftp\UserChoice` | `ProgId` | String | "ChromeHTML" |
-
-**Note:** `<SID>` represents each user's Security Identifier (e.g., S-1-5-21-xxxx...)
-
-#### 4. Chrome File Associations (.htm, .html, .xhtml)
-
-**For Each User Profile and Each Extension:**
-
-| Action | Registry Path | Value Name | Type | Purpose |
-|--------|--------------|------------|------|---------|
-| PATH_CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\htm\UserChoice` | N/A | Path | Creates file type key |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\htm\UserChoice` | `Hash` | String | Windows security hash |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\htm\UserChoice` | `ProgId` | String | "ChromeHTML" |
-| PATH_CREATED | `HKU\<SID>\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\UserChoice` | N/A | Path | Creates file extension key |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\UserChoice` | `Hash` | String | Windows security hash |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\UserChoice` | `ProgId` | String | "ChromeHTML" |
-
-*Repeat for .html and .xhtml extensions*
-
-#### 5. Outlook Default Email Client
-
-**For Each User Profile:**
-
-| Action | Registry Path | Value Name | Type | Purpose |
-|--------|--------------|------------|------|---------|
-| PATH_CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\mailto\UserChoice` | N/A | Path | Creates mailto protocol key |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\mailto\UserChoice` | `Hash` | String | Windows security hash |
-| CREATED | `HKU\<SID>\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\mailto\UserChoice` | `ProgId` | String | "Outlook.URL.mailto.15" |
-
-#### 6. UCPD Service (Installation Only)
-
-| Action | Registry Path | Value Name | Type | Old Value | New Value | Purpose |
-|--------|--------------|------------|------|-----------|-----------|---------|
-| MODIFIED | `HKLM:\SYSTEM\CurrentControlSet\Services\UCPD` | `Start` | DWord | 2 (Automatic) | 4 (Disabled) | Disables UCPD service |
-
-### Registry Changes NOT Made
-
-**Important: The following are NOT registry changes but are logged for completeness:**
-
-- **Wallpaper**: Set via Windows API `SystemParametersInfo()` - No registry modification
-- **Edge Removal**: File deletion and COM verbs - No registry modification
-- **Taskbar Pins**: XML import via `Import-StartLayout` - No direct registry modification
-- **UCPD Task**: Disabled via Task Scheduler API - Stored in Task Scheduler database, not registry
-
-### Log File Locations
-
-#### Main Log File
-```
-%TEMP%\DesktopConfig.log
-```
-**Full Path Examples:**
-- Current user: `C:\Users\<username>\AppData\Local\Temp\DesktopConfig.log`
-- System account: `C:\Windows\Temp\DesktopConfig.log`
-
-**Contains:**
-- Timestamped execution flow
-- Success/error messages
-- Registry modifications
-- Application checks
-- Performance metrics
-
-#### Registry Changes CSV
-```
-%TEMP%\DesktopConfig_RegistryChanges_YYYYMMDD_HHMMSS.csv
-```
-**Example:** `C:\Users\johndoe\AppData\Local\Temp\DesktopConfig_RegistryChanges_20251004_143025.csv`
-
-**CSV Columns:**
-- `Timestamp` - When the change occurred
-- `Action` - PATH_CREATED, CREATED, or MODIFIED
-- `RegistryPath` - Full registry path
-- `ValueName` - Name of the registry value
-- `OldValue` - Previous value (for MODIFIED actions)
-- `NewValue` - New value being set
-- `ValueType` - Registry data type (String, DWord, etc.)
-
-**CSV Example:**
-```csv
-Timestamp,Action,RegistryPath,ValueName,OldValue,NewValue,ValueType
-2025-10-04 14:30:15,PATH_CREATED,HKCU:\Control Panel\Desktop,N/A,,,Path
-2025-10-04 14:30:15,CREATED,HKCU:\Control Panel\Desktop,ScreenSaveActive,,1,String
-2025-10-04 14:30:15,MODIFIED,HKCU:\Control Panel\Desktop,ScreenSaveTimeOut,300,600,String
-2025-10-04 14:30:16,CREATED,HKU\S-1-5-21-xxx\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice,Hash,,ABc123DEf456=,String
-2025-10-04 14:30:16,CREATED,HKU\S-1-5-21-xxx\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice,ProgId,,ChromeHTML,String
-```
-
-## Logs and Troubleshooting
-
-### Log File Structure
-
-#### Main Log Format
-```
-[YYYY-MM-DD HH:MM:SS] [LEVEL] Message
-
-Levels:
-- INFO: General information
-- SUCCESS: Successful operations
-- WARNING: Non-critical issues
-- ERROR: Critical failures
-- REGISTRY: Registry modifications
-- DEBUG: Detailed debugging info
-```
-
-#### Example Log Output
-```
-[2025-10-04 14:30:10] [INFO] ==========================================
-[2025-10-04 14:30:10] [INFO] Desktop Configuration Script v2.2 Started
-[2025-10-04 14:30:10] [INFO] ==========================================
-[2025-10-04 14:30:10] [INFO] User: johndoe
-[2025-10-04 14:30:10] [INFO] Computer: DESKTOP-ABC123
-[2025-10-04 14:30:10] [INFO] Admin Rights: False
-[2025-10-04 14:30:10] [INFO] MODE: Configuration
-[2025-10-04 14:30:10] [INFO] 
-[2025-10-04 14:30:10] [INFO] --- STEP 1: Wallpaper Configuration ---
-[2025-10-04 14:30:11] [SUCCESS] Wallpaper set successfully: \\server\share\wallpaper.jpg
-[2025-10-04 14:30:11] [INFO] 
-[2025-10-04 14:30:11] [INFO] --- STEP 3: Screensaver Configuration ---
-[2025-10-04 14:30:11] [REGISTRY] REGISTRY [CREATED] Path: HKCU:\Control Panel\Desktop | Name: ScreenSaveActive | Type: String | Value: '1'
-[2025-10-04 14:30:11] [SUCCESS] Created registry: HKCU:\Control Panel\Desktop\ScreenSaveActive = '1' (Type: String)
-[2025-10-04 14:30:12] [INFO] --- STEP 4: Chrome Default Browser (Protocols) ---
-[2025-10-04 14:30:12] [INFO] Processing user: johndoe (SID: S-1-5-21-xxx)
-[2025-10-04 14:30:12] [INFO] Setting http protocol for johndoe
-[2025-10-04 14:30:12] [REGISTRY] REGISTRY [CREATED] Path: HKU\S-1-5-21-xxx\Software\...\http\UserChoice | Name: Hash | Type: String | Value: 'ABc123=='
-[2025-10-04 14:30:13] [SUCCESS] Chrome default browser (protocols) configuration completed
-[2025-10-04 14:30:25] [INFO] === REGISTRY CHANGE SUMMARY ===
-[2025-10-04 14:30:25] [INFO] Total registry modifications: 47
-[2025-10-04 14:30:25] [INFO] PATH_CREATED: 12 changes
-[2025-10-04 14:30:25] [INFO] CREATED: 32 changes
-[2025-10-04 14:30:25] [INFO] MODIFIED: 3 changes
-```
-
-**View All Logs:**
-```powershell
-# Main log
-notepad $env:TEMP\DesktopConfig.log
-
-# Registry changes
-$csv = Get-ChildItem "$env:TEMP\DesktopConfig_RegistryChanges_*.csv" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-& $csv.FullName
-
-# Task history
-Get-ScheduledTask -TaskName "DesktopConfiguration" | 
-    Get-ScheduledTaskInfo | 
-    Select-Object LastRunTime, LastTaskResult, NumberOfMissedRuns
-
-
-## Rollback/Uninstall Steps
-
-### Complete Removal Procedure
-
-Follow these steps in order to completely remove the desktop configuration system:
-
-#### Step 1: Delete Scheduled Task
-
-**Method A: PowerShell (Recommended)**
-```powershell
-# Open PowerShell as Administrator
-Unregister-ScheduledTask -TaskName "DesktopConfiguration" -Confirm:$false
-```
-
-**Method B: Task Scheduler GUI**
-1. Open Task Scheduler (`taskschd.msc`)
-2. Navigate to **Task Scheduler Library**
-3. Find **"DesktopConfiguration"** task
-4. Right-click → **Delete**
-5. Confirm deletion
-
-**Verification:**
-```powershell
-Get-ScheduledTask -TaskName "DesktopConfiguration" -ErrorAction SilentlyContinue
-# Should return: Nothing (task not found)
-```
-
-
-### Best Practices for Corporate Deployment
-
-1. **Document Changes**
-   - Maintain inventory of systems with UCPD disabled
-   - Record business justification
-   - Update change management records
-
-2. **Security Controls**
-   - Deploy only to managed corporate devices
-   - Require antivirus/EDR on all systems
-   - Monitor for unauthorized app association changes
-   - Implement application whitelisting (AppLocker)
-
-3. **Compliance Considerations**
-   - Review with security team before deployment
-   - Ensure compliance with ISO 27001, SOC 2, etc.
-   - Document risk acceptance by management
-   - Include in security audit scope
-
-4. **User Communication**
-   - Inform users about corporate app standards
-   - Explain why Chrome/Outlook are required
-   - Provide support channels for issues
-   - Document acceptable use policy
-
-5. **Regular Reviews**
-   - Quarterly audit of deployed systems
-   - Review security logs for anomalies
-   - Update documentation as needed
-   - Reassess risk profile annually
-
-
-## Deliverables
-
-This section confirms all required deliverables are included.
-
-### 1. PowerShell Script Package ✅
-
-**Primary Script:** `DesktopConfig.ps1` (v2.2)
-
-**Configurable Variables:**
-- ✅ Wallpaper path
-- ✅ Lock screen path  
-- ✅ Screensaver path and timeout
-- ✅ Application paths (Chrome, Office, Teams)
-- ✅ Web application URLs
-- ✅ Task name
-- ✅ Password requirement for screensaver
-
-**Located at:** Lines 46-68 in `$Config` hashtable
-
-**Logging Features:**
-- ✅ Detailed execution log: `%TEMP%\DesktopConfig.log`
-- ✅ Registry changes CSV: `%TEMP%\DesktopConfig_RegistryChanges_*.csv`
-- ✅ Timestamped entries with severity levels
-- ✅ Success/failure tracking for each operation
-- ✅ Performance metrics (execution time)
-- ✅ User/computer information
-- ✅ Complete audit trail
-
-**Error Handling:**
-- ✅ Try-catch blocks on all critical operations
-- ✅ Graceful handling of missing files/applications
-- ✅ Detailed error messages in logs
-- ✅ Non-fatal errors don't stop execution
-- ✅ Exit codes: 0 (success), 1 (failure)
-
-### 2. Automation Setup ✅
-
-**Task Scheduler XML:** `DesktopConfigTask.xml`
-- ✅ Pre-configured for "Any user" logon trigger
-- ✅ Principal: BUILTIN\Users with highest privilege
-- ✅ Action: PowerShell with hidden window
-- ✅ Settings: Allow on battery, start when available
-- ✅ Can be imported manually if Deploy.bat fails
-
-**Batch Wrapper:** `Deploy.bat`
-- ✅ Checks for administrator privileges
-- ✅ Creates `C:\Scripts\` directory
-- ✅ Copies PowerShell script and XML
-- ✅ Executes PowerShell installation
-- ✅ Validates installation success
-- ✅ Provides fallback methods if primary fails
-- ✅ Detailed error reporting
-
-**Installation Methods Provided:**
-1. ✅ Automated: Deploy.bat (recommended)
-2. ✅ Manual PowerShell: Direct script execution
-3. ✅ XML Import: Task Scheduler GUI import
-
-## Supported Windows Profiles
-
-### Profile Types Supported
-
-| Profile Type | SID Pattern | Supported | Notes |
-|-------------|-------------|-----------|-------|
-| Local User Accounts | `S-1-5-21-*` | ✅ Yes | Traditional local Windows accounts |
-| System Accounts | `S-1-5-18`, etc. | ⚠️ Excluded | Automatically excluded by script |
-
-
-### Roaming Profiles
-
-**Supported with Considerations:**
-- ✅ Settings apply to local computer
-- ⚠️ Some settings don't roam (wallpaper, screensaver)
-- ⚠️ Browser/email defaults are per-computer
-- ✅ Marker file roams with profile
-- ✅ Test roaming behavior before production
-
-
-**End of Documentation**
-
-**Document Version:** 2.2  
-**Last Updated:** October 2025  
-**Script Version:** 2.2  
-**Compatibility:** Windows 10 Pro, Windows 11 Pro  
-**PowerShell Version:** 5.1+ Important:** Re-enabling UCPD will restore Windows' default protection for app associations. This prevents automated changes but also blocks your custom configuration.
-
-```powershell
-# Re-enable UCPD service
+   Should show:
+   - Deploy.bat
+   - DesktopConfig.ps1
+   - wallpaper.jpg          ← Must exist
+   - lockscreen.jpg         ← Must exist
+   - screensaver.jpg        ← Must exist
+Step 2: Customize Configuration (Optional)
+Edit DesktopConfig.ps1 if you need to change:
+
+Chrome homepage URL (default: https://www.google.com)
+Screensaver timeout (default: 600 seconds = 10 minutes)
+Office paths (if different version)
+
+Step 3: Run Installation
+
+Right-click Deploy.bat
+Select "Run as administrator"
+Deployment script will:
+
+Create C:\Scripts\ and C:\Scripts\Images\
+Copy PowerShell script to C:\Scripts\
+Copy images to C:\Scripts\Images\
+Disable UCPD service
+Create scheduled task
+
+
+
+Step 4: ⚠️ RESTART COMPUTER (Mandatory)
+You MUST restart after installation.
+Why restart is required:
+- UCPD is a kernel-level driver
+- Service changes require system restart
+- Without restart, browser/email settings will fail
+Step 5: Verify Installation
+After restart:
+powershell# Check scheduled task exists
+Get-ScheduledTask -TaskName "DesktopConfiguration"
+
+# Check script files exist
+Test-Path "C:\Scripts\DesktopConfig.ps1"
+Test-Path "C:\Scripts\Images\wallpaper.jpg"
+Test-Path "C:\Scripts\Images\lockscreen.jpg"
+Test-Path "C:\Scripts\Images\screensaver.jpg"
+
+# Check UCPD is disabled
+Get-Service UCPD
+# Should show: Status=Stopped, StartType=Disabled
+Step 6: Test Configuration
+
+Log off current session
+Log in as standard user (non-admin)
+Wait 30 seconds
+Verify settings applied:
+
+Wallpaper changed
+Lock screen updated (press Windows+L)
+Chrome is default browser
+Chrome opens to company homepage
+Taskbar has corporate pins
+
+
+
+
+5. Configuration Parameters
+File: DesktopConfig.ps1 (Lines 46-70)
+Image Paths (Fixed - Do Not Change)
+ParameterValuePurposeWallpaperPathC:\Scripts\Images\wallpaper.jpgDesktop wallpaper (enforced every logon)LockScreenPathC:\Scripts\Images\lockscreen.jpgLock screen image (enforced every logon)ScreensaverPathC:\Scripts\Images\screensaver.jpgScreensaver image folder
+⚠️ Do NOT change these paths - Deploy.bat copies images here automatically.
+Customizable Settings
+ParameterDefaultOptionsPurposeScreensaverTimeout600300=5min, 600=10min, 900=15minIdle time before screensaverScreensaverPasswordRequired$true$true, $falseRequire password after screensaverChromeHomepagehttps://www.google.comAny URLChrome startup page and homepage
+Application Paths (Usually Don't Need Changes)
+ParameterDefault PathPurposeChromePathC:\Program Files\Google\Chrome\Application\chrome.exeChrome browser locationOutlookPathC:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXEOutlook locationWordPathC:\Program Files\Microsoft Office\root\Office16\WINWORD.EXEWord for taskbar pinExcelPathC:\Program Files\Microsoft Office\root\Office16\EXCEL.EXEExcel for taskbar pinTeamsPath%LOCALAPPDATA%\Microsoft\WindowsApps\ms-teams.exeTeams for taskbar pin
+Note: For Office 2013, change Office16 to Office15 in all Office paths.
+
+6. Post-Installation
+What Happens After Installation
+Immediate (After Restart):
+
+UCPD disabled (allows configuration)
+Scheduled task ready
+Images stored locally
+System ready for enforcement
+
+At Every User Logon:
+
+Script runs automatically (hidden)
+Settings applied/enforced within 30 seconds
+User changes reverted automatically
+Desktop appears with corporate standards
+
+Enforcement Behavior
+User ActionSystem ResponseUser changes wallpaperReset at next logonUser changes Chrome defaultReset at next logonUser changes homepageReset at next logonUser removes taskbar pinsRestored at next logonUser changes screensaverReset at next logon
+Settings are enforced EVERY logon - no marker file prevents re-execution.
+Manual UCPD Re-enable (Optional)
+If your security policy requires UCPD enabled after initial configuration:
+powershell# Run as Administrator
 Set-Service -Name UCPD -StartupType Automatic
-
-# Re-enable UCPD scheduled task
 Enable-ScheduledTask -TaskName "\Microsoft\Windows\AppxDeploymentClient\UCPD velocity"
 
-# Verification
-Get-Service UCPD | Select-Object Status, StartType
-# Should show: Status=Stopped (or Running), StartType=Automatic
-```
+# Restart required
+Restart-Computer
+⚠️ WARNING: Re-enabling UCPD will break enforcement at next logon. Browser/email defaults will no longer be enforced. Only re-enable if you want one-time configuration instead of continuous enforcement.
 
-**Restart Required:**
-```powershell
-# UCPD changes require restart
-Restart-Computer -Force
-```
+8. Registry Changes Documentation
+Registry Keys Modified
+1. Lock Screen (System-Wide)
+PathValueTypePurposeHKLM:\SOFTWARE\...\PersonalizationCSPLockScreenImagePathStringSets lock screen image path
+2. Screensaver (Per-User)
+PathValueTypeNew ValueHKCU:\Control Panel\DesktopScreenSaveActiveString1HKCU:\Control Panel\DesktopScreenSaveTimeOutString600HKCU:\Control Panel\DesktopSCRNSAVE.EXEStringPhotoScreensaver.scrHKCU:\Control Panel\DesktopScreenSaverIsSecureString1HKCU:\...\Photo Viewer\...\ScreensaverEncryptedPIDLStringBase64 image path
+3. Chrome Default Browser (Per-User, All Profiles)
+PathValueTypePurposeHKU\<SID>\...\UrlAssociations\http\UserChoiceHashStringWindows validation hashHKU\<SID>\...\UrlAssociations\http\UserChoiceProgIdStringChromeHTMLHKU\<SID>\...\UrlAssociations\https\UserChoiceHashStringWindows validation hashHKU\<SID>\...\UrlAssociations\https\UserChoiceProgIdStringChromeHTML
+4. Chrome File Associations (.htm, .html, .pdf)
+PathValueTypePurposeHKU\<SID>\...\FileExts\.htm\UserChoiceHashStringWindows validation hashHKU\<SID>\...\FileExts\.htm\UserChoiceProgIdStringChromeHTMLHKU\<SID>\...\FileExts\.html\UserChoiceHashStringWindows validation hashHKU\<SID>\...\FileExts\.html\UserChoiceProgIdStringChromeHTMLHKU\<SID>\...\FileExts\.pdf\UserChoiceHashStringWindows validation hashHKU\<SID>\...\FileExts\.pdf\UserChoiceProgIdStringChromeHTML
+5. Chrome Homepage (Per-User, JSON File)
+Location: C:\Users\[username]\AppData\Local\Google\Chrome\User Data\[Profile]\Preferences
+Modified JSON properties:
 
-#### Step 3: Remove Script Files
+homepage = Your company URL
+homepage_is_newtabpage = false
+browser.show_home_button = true
+session.restore_on_startup = 4
+session.startup_urls = [Your company URL]
 
-**Method A: PowerShell**
-```powershell
-# Remove entire Scripts directory
-Remove-Item -Path "C:\Scripts" -Recurse -Force -ErrorAction SilentlyContinue
+6. Outlook Default Email (Per-User)
+PathValueTypePurposeHKU\<SID>\...\UrlAssociations\mailto\UserChoiceHashStringWindows validation hashHKU\<SID>\...\UrlAssociations\mailto\UserChoiceProgIdStringOutlook.URL.mailto.15
+7. UCPD Service (Installation Only)
+PathValueTypeOldNewPurposeHKLM:\SYSTEM\...\Services\UCPDStartDWord24Disables UCPD permanently
 
-# Verification
+9. Logs and Troubleshooting
+Log File Locations
+Main Log:
+C:\Users\[username]\AppData\Local\Temp\DesktopConfig.log
+Registry Changes CSV:
+C:\Users\[username]\AppData\Local\Temp\DesktopConfig_RegistryChanges_YYYYMMDD_HHMMSS.csv
+CSV Columns
+ColumnDescriptionTimestampWhen change occurredActionPATH_CREATED, CREATED, MODIFIEDRegistryPathFull registry pathValueNameRegistry value nameOldValuePrevious value (for MODIFIED)NewValueNew value setValueTypeString, DWord, etc.
+Common Issues
+Issue 1: Images Not Found
+Symptoms: Log shows "Wallpaper file not found"
+Cause: Images not copied to C:\Scripts\Images\
+Solution:
+powershell# Check if images exist
+Test-Path "C:\Scripts\Images\wallpaper.jpg"
+Test-Path "C:\Scripts\Images\lockscreen.jpg"
+Test-Path "C:\Scripts\Images\screensaver.jpg"
+
+# If missing, copy manually:
+Copy-Item "C:\Source\wallpaper.jpg" -Destination "C:\Scripts\Images\"
+Copy-Item "C:\Source\lockscreen.jpg" -Destination "C:\Scripts\Images\"
+Copy-Item "C:\Source\screensaver.jpg" -Destination "C:\Scripts\Images\"
+Issue 2: Chrome Homepage Not Setting
+Symptoms: Chrome opens to different page
+Cause: Chrome was running when script executed
+Solution: Log off and back on (Chrome must be closed for Preferences file modification)
+Issue 3: Settings Not Enforced
+Symptoms: User changes persist
+Cause: Scheduled task not running
+Solution:
+powershell# Check task status
+Get-ScheduledTask -TaskName "DesktopConfiguration"
+
+# Check task history
+Get-ScheduledTask -TaskName "DesktopConfiguration" | Get-ScheduledTaskInfo
+
+# Run manually for testing
+C:\Scripts\DesktopConfig.ps1 -Configure
+Manual Testing
+powershell# View main log
+notepad C:\Users\$env:USERNAME\AppData\Local\Temp\DesktopConfig.log
+
+# View registry changes
+$csv = Get-ChildItem "$env:TEMP\DesktopConfig_RegistryChanges_*.csv" | 
+       Sort-Object LastWriteTime -Descending | 
+       Select-Object -First 1
+& $csv.FullName
+
+# Test configuration manually
+C:\Scripts\DesktopConfig.ps1 -Configure
+
+10. Rollback/Uninstall Steps
+Complete Removal
+Step 1: Remove Scheduled Task
+powershell# Open PowerShell as Administrator
+Unregister-ScheduledTask -TaskName "DesktopConfiguration" -Confirm:$false
+Step 2: Re-enable UCPD (Optional)
+powershellSet-Service -Name UCPD -StartupType Automatic
+Enable-ScheduledTask -TaskName "\Microsoft\Windows\AppxDeploymentClient\UCPD velocity"
+
+# Restart required
+Restart-Computer
+Step 3: Remove Script Files
+powershellRemove-Item -Path "C:\Scripts" -Recurse -Force
+Step 4: Verify Removal
+powershell# Check task removed
+Get-ScheduledTask -TaskName "DesktopConfiguration" -ErrorAction SilentlyContinue
+# Should return nothing
+
+# Check UCPD status
+Get-Service UCPD
+# If re-enabled: Status=Running, StartType=Automatic
+
+# Check files removed
 Test-Path "C:\Scripts"
-# Should return: False
-```
+# Should return False
+Reset User Settings (Optional)
+powershell# Reset default browser manually
+Start-Process ms-settings:defaultapps
 
-**Method B: File Explorer**
-1. Open File Explorer
-2. Navigate to `C:\Scripts`
-3. Delete the entire folder
-4. Empty Recycle Bin
+# Reset wallpaper to Windows default
+# (User can change via Settings > Personalization > Background)
 
-#### Step 4: Clean User Markers
+Summary Checklist
+Before Installation
 
-**Remove configuration markers for all users:**
+ Prepare deployment folder
+ Add Deploy.bat and DesktopConfig.ps1
+ ⚠️ ADD wallpaper.jpg (1920x1080 JPEG recommended)
+ ⚠️ ADD lockscreen.jpg (1920x1080 JPEG recommended)
+ ⚠️ ADD screensaver.jpg (Any resolution JPEG)
+ Verify all 5 files present
+ Customize Chrome homepage URL if needed (optional)
+ Backup Windows Registry
 
-```powershell
-# Remove markers from all user profiles
-Get-ChildItem "C:\Users\*\AppData\Roaming\DesktopConfigApplied.marker" -ErrorAction SilentlyContinue | 
-    Remove-Item -Force
+During Installation
 
-# Verification
-Get-ChildItem "C:\Users\*\AppData\Roaming\DesktopConfigApplied.marker" -ErrorAction SilentlyContinue
-# Should return: Nothing
-```
+ Run Deploy.bat as Administrator
+ Wait for completion
+ ⚠️ RESTART COMPUTER
 
-### Partial Rollback Options
+After Installation
 
-#### Keep Task, Reset User Settings
+ Verify scheduled task created
+ Verify images copied to C:\Scripts\Images\
+ Verify UCPD disabled
+ Test with standard user account
+ Check logs for errors
+ Verify settings enforced
 
-If you want to keep the system but reset settings for troubleshooting:
+Ongoing
 
-```powershell
-# For current user only
-Remove-Item "$env:APPDATA\DesktopConfigApplied.marker" -Force
-
-# Log off and back on to reapply configuration
-logoff
-```
-
-#### Disable Task Temporarily
-
-```powershell
-# Disable without deleting
-Disable-ScheduledTask -TaskName "DesktopConfiguration"
-
-# Re-enable later
-Enable-ScheduledTask -TaskName "DesktopConfiguration"
-```
-
-### Rollback Verification Checklist
-
-After rollback, verify:
-
-- ☐ Scheduled task removed (`taskschd.msc`)
-- ☐ UCPD service re-enabled (if desired)
-- ☐ Script files deleted (`C:\Scripts`)
-- ☐ User markers removed
-- ☐ Computer restarted (if UCPD re-enabled)
-- ☐ Default browser reset to Edge
-- ☐ Wallpaper restored to Windows default
-- ☐ Screensaver disabled or reset
-- ☐ Taskbar pins restored to defaults
-
----
-
-## Important Security Notes
-
-### User Choice Protection Driver (UCPD)
-
-#### What is UCPD?
-
-The **User Choice Protection Driver** is a Windows kernel-level component introduced to prevent unauthorized modification of default app associations. It was added to:
-- Protect users from malware changing default browsers
-- Prevent software from hijacking file associations
-- Comply with regulatory requirements (EU Digital Markets Act)
-
-#### Why We Disable It
-
-**Business Justification:**
-- Enterprise environments need centralized app management
-- Group Policy alone cannot override UCPD-protected associations
-- Microsoft provides this method for corporate deployments
-- Alternative methods (GPO preferences) are less reliable
-
-**Technical Justification:**
-- UCPD blocks programmatic registry changes to `UserChoice` keys
-- Hash-based validation requires disabling UCPD or using complex hash calculation
-- Our script uses hash calculation BUT still requires UCPD disabled for reliability
-
-#### Security Implications
-
-**✅ Low Risk When:**
-- Applied in corporate managed environment
-- Devices are domain-joined or Azure AD joined
-- Endpoint protection (antivirus/EDR) is active
-- Users are standard accounts (non-admin)
-- Network is secured with firewalls
-- Regular security patching is maintained
-
-**⚠️ Higher Risk If:**
-- Applied to personal/home computers
-- Users have local admin privileges
-- No antivirus/EDR protection
-- Public Wi-Fi or unsecured networks
-- Devices leave corporate network
-
-**❌ Do NOT Use If:**
-- BYOD (Bring Your Own Device) policy
-- Personal computers
-- Unmanaged endpoints
-- Compliance forbids UCPD disabling
+ Settings enforced every logon automatically
+ Review logs periodically
+ Monitor for issues
+ Keep image files in C:\Scripts\Images\
 
 
-**2. Combine with Endpoint Protection**
-- Ensure Windows Defender or corporate antivirus is active
-- Enable tamper protection
-- Monitor for suspicious app association changes
-
-**3. Use Least Privilege**
-- Users should be standard accounts, not administrators
-- UAC should be enabled
-- AppLocker/Software Restriction Policies recommended
-
-**4. Monitor for Changes**
-- Regularly audit default app associations
-- Alert on unexpected browser/email client changes
-- Use security monitoring tools (SIEM)
-
-**5. Document and Audit**
-- Maintain list of systems with UCPD disabled
-- Perform quarterly reviews
-- Document business justification
-
-#### Re-enabling UCPD After Configuration
-
-**Option 1: Permanent Configuration (Recommended)**
-Leave UCPD disabled permanently for managed corporate devices. This is Microsoft's recommended approach for enterprise scenarios.
-
-**Option 2: Re-enable After Initial Setup**
-If your security policy requires, re-enable UCPD after users are configured:
-
-```powershell
-# Modify script to re-enable UCPD after configuration
-# Add to end of Invoke-DesktopConfiguration function:
-
-if (Test-IsAdmin) {
-    Write-Log "Re-enabling UCPD for security..." "INFO"
-    Set-Service -Name UCPD -StartupType Automatic
-    Enable-ScheduledTask -TaskName "\Microsoft\Windows\AppxDeploymentClient\UCPD velocity"
-    Write-Log "UCPD re-enabled. Restart required." "WARNING"
-}
-```
-
-**⚠️# Desktop Configuration System - Complete Documentation
+Note: UCPD remains disabled permanently to allow enforcement at every logon. This is intentional and required for the enforcement feature to work. Re-enabling UCPD will break the enforcement functionality.
+End of Documentation

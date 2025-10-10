@@ -19,12 +19,14 @@ if %errorLevel% neq 0 (
 REM Set script paths
 set SCRIPT_DIR=C:\Scripts
 set SCRIPT_NAME=DesktopConfig.ps1
+set IMAGES_DIR=C:\Scripts\Images
 set SCRIPT_PATH=%SCRIPT_DIR%\%SCRIPT_NAME%
 set TASK_XML=%SCRIPT_DIR%\DesktopConfigTask.xml
 set CURRENT_DIR=%~dp0
 
 echo Creating script directory...
 if not exist "%SCRIPT_DIR%" mkdir "%SCRIPT_DIR%"
+if not exist "%IMAGES_DIR%" mkdir "%IMAGES_DIR%"
 if %errorLevel% neq 0 (
     echo ERROR: Failed to create directory %SCRIPT_DIR%
     pause
@@ -40,6 +42,7 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
+
 echo Copying Task Scheduler XML...
 copy /Y "%CURRENT_DIR%DesktopConfigTask.xml" "%TASK_XML%" >nul 2>&1
 if %errorLevel% neq 0 (
@@ -47,6 +50,22 @@ if %errorLevel% neq 0 (
     echo Check if DesktopConfigTask.xml exists in the current directory
     pause
     exit /b 1
+)
+
+echo Copying images to local Scripts folder...
+copy /Y "%CURRENT_DIR%wallpaper.jpg" "%IMAGES_DIR%\wallpaper.jpg" >nul 2>&1
+if %errorLevel% neq 0 (
+    echo WARNING: wallpaper.jpg not found in current directory
+)
+
+copy /Y "%CURRENT_DIR%lockscreen.jpg" "%IMAGES_DIR%\lockscreen.jpg" >nul 2>&1
+if %errorLevel% neq 0 (
+    echo WARNING: lockscreen.jpg not found in current directory
+)
+
+copy /Y "%CURRENT_DIR%screensaver.jpg" "%IMAGES_DIR%" >nul 2>&1
+if %errorLevel% neq 0 (
+    echo WARNING: screensaver.jpg not found in current directory
 )
 
 echo.
